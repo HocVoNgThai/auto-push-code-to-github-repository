@@ -10,7 +10,7 @@ from watchdog.events import FileSystemEventHandler
 class GitHandler(FileSystemEventHandler):
     def __init__(self):
         self.last_event = 0
-        self.debounce = 20
+        self.debounce = 10
 
     def on_any_event(self, event):
         if not event.is_directory and time.time() - self.last_event > self.debounce:
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     observer.start()
     try:
         while True:
-            time.sleep(20)
+            time.sleep(5)
     except KeyboardInterrupt:
         observer.stop()
     observer.join()
