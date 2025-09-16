@@ -1,0 +1,65 @@
+#macOS
+
+.DS_Store .AppleDouble .LSOverride .DocumentRevisions-V100 .fseventsd .Spotlight-V100 .Trashes *.icloud
+
+#Windows
+
+Thumbs.db desktop.ini $RECYCLE.BIN/ *.cab *.msi *.msm *.msp
+
+#Node.js
+
+node_modules/ npm-debug.log yarn-error.log yarn.lock package-lock.json .pnpm-store/ dist/ build/
+
+#Python
+
+*.pyc pycache/ *.pyo *.pyd .Python env/ venv/ ENV/ .env *.env *.venv pip-log.txt pip-selfcheck.json *.egg-info/ .tox/ .coverage coverage.xml *.cover
+
+#Java
+
+*.class *.jar *.war *.ear target/ out/ build/ bin/ *.iml .gradle/ build.gradle.kts .gradle dependency-cache/ libs/ .classpath .project .settings/
+
+#Go
+
+*.exe *.exe~ *.dll *.so *.dylib bin/ pkg/ vendor/ *.test *.out
+
+#React
+
+/build/ /coverage/ /dist/ *.log .eslintcache .stylelintcache tsconfig.tsbuildinfo
+
+#Docker
+
+Dockerfile.* docker-compose*.yml *.dockerignore *.container
+
+#Databases
+
+*.sql *.sqlite *.sqlite3 *.db *.db3 *.sql.gz
+
+#IDEs and Editors
+
+.vscode/ .idea/ *.sublime-project *.sublime-workspace *.code-workspace .nvim/ .nvimrc *.swp *.swo *.tmp
+
+#Logs
+
+.log logs/ npm-debug.logyarn-debug.log* yarn-error.log* .log.
+
+#Temporary files
+
+*.tmp *.bak *.swp *~ *.cache *.pid *.seed *.pid.lock
+
+#Build outputs
+
+dist/ build/ out/ public/build/ public/dist/
+
+#Archives
+
+*.zip *.tar.gz *.rar *.7z *.tgz
+
+#Environment-specific
+
+.local/ .env.local .env.development.local .env.test.local .env.production.local
+
+#Miscellaneous
+
+*.bak *.gho *.ori *.orig *.rej *.suo *.nupkg *.snk *.coverage *.pytest_cache/ *.ruff_cache/ *.mypy_cache/
+
+*.swp
