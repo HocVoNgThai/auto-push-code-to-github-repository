@@ -46,12 +46,12 @@ commit_and_push() {
 if [ "$WATCH_TOOL" = "inotifywait" ]; then
     while true; do
         inotifywait -r -e modify,create,delete,move --exclude '(\.git/|\.DS_Store|node_modules/)' .
-        sleep 10
+        sleep 5
         commit_and_push
     done
 elif [ "$WATCH_TOOL" = "fswatch" ]; then
     fswatch -0 -r --exclude '\.git/|\.DS_Store|node_modules/' . | while read -d "" event; do
-        sleep 10
+        sleep 5
         commit_and_push
     done
 fi
