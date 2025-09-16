@@ -1,1 +1,2 @@
- # auto-update-github-repo \n test
+ # auto-update-github-repo
+Check file script tự động update repo github
