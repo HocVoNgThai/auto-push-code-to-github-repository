@@ -51,7 +51,7 @@ git remote set-url origin git@github.com:USERNAME/REPO.git
 
 ---
 ## How to use ❓
-- Get inotify-tools:
+- Get inotify-tools (Bash script):
   - Linux:
 ```
 sudo apt install inotify-tools
@@ -60,6 +60,41 @@ sudo apt install inotify-tools
 ```
 brew install inotify-tools
 ```
+- Get watchdog (Python script):
+```
+python -m venv myvenv
+source myvenv/bin/activate
+pip install watchdog
+```
 - Get source code:
+```
+git clone https://github.com/HocVoNgThai/auto-push-code-to-github-repository.git
+cd auto-push-code-to-github-repository
+```
+- Run and auto push code:
+  - Bash script:
+```
+chmod +x auto_update.sh
+./auto_update.sh /path/to/your/repo
+```
+  - Python script:
+```
+python3 auto_update.py /path/to/your/repo
+```
+  - Using `nohup` to run as a background process:
+```
+nohup ./auto_update.sh /path/to/your/repo &
+nohup python3 auto_update.py /path/to/your/repo &
+```
+  - Stop run as a background process:
+```
+pgrep -f "python3 auto_update.py"
+pgrep -f "auto_update.sh"
+kill <PID>
+```
+- Copy `.gitignore` file to your folder and chose which types of file you dont want to push to github repo.
 
+---
+## Updating 🔁
+Updating script and tutorial for Windows.
 
