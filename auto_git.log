@@ -40,3 +40,6 @@ error: Please commit or stash them.
 error: Please commit or stash them.
 
 2025-09-17 15:49:43,869: Unstaged changes detected. Committing them...
+2025-09-17 15:49:43,875: Committed unstaged changes
+2025-09-17 15:49:43,876: Conflict detected during rebase. Aborting rebase.
+2025-09-17 15:49:43,877: Error aborting rebase: Command '['git', 'rebase', '--abort']' returned non-zero exit status 128.
