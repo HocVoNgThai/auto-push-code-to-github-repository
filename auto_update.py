@@ -45,6 +45,19 @@ class GitHandler(FileSystemEventHandler):
             self.pending_deletes_file.add(event.src_path)
             self.pending_creates_file.add(event.dest_path)
 
+    def handle_unstaged_changes(self):
+        result = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True)
+        if any(line and not line.startswith('??') for line in result.stdout.splitlines()):
+            logging.info("Unstaged changes detected. Committing them...")
+            try:
+                subprocess.check_call(['git', 'add', '.'])
+                subprocess.check_call(['git', 'commit', '-m', 'Auto commit unstaged changes'])
+                logging.info("Committed unstaged changes")
+            except subprocess.CalledProcessError as e:
+                logging.error(f"Error in committing unstaged changes: {e}")
+                return False
+        return True
+
     def process_changes(self):
         if time.time() - self.last_event < self.debounce:
             return
@@ -106,24 +119,49 @@ class GitHandler(FileSystemEventHandler):
                 logging.info(f"Committed: {message}")
             except subprocess.CalledProcessError as e:
                 logging.error(f"Error in git add/commit: {e}")
+                return
 
+            pull_needed = True
             try:
                 subprocess.check_call(['git', 'fetch', 'origin'])
-                subprocess.check_call(['git', 'pull', '--rebase', 'origin', self.branch])
-            except subprocess.CalledProcessError:
-                logging.error("Conflict detected during rebase. Aborting rebase.")
-                try:
-                    subprocess.check_call(['git', 'rebase', '--abort'])
-                except subprocess.CalledProcessError as e:
-                    logging.error(f"Error aborting rebase: {e}")
-                return 
-
-            try:
-                subprocess.check_call(['git', 'push', '-u', 'origin', self.branch])
-                logging.info("Pushed successfully")
+                pull_result = subprocess.run(['git', 'pull', '--rebase', 'origin', self.branch], capture_output=True, text=True)
+                if pull_result.returncode != 0:
+                    logging.error(f"Pull failed: {pull_result.stderr}")
+                    if "You have unstaged changes" in pull_result.stderr:
+                        if not self.handle_unstaged_changes():
+                            return
+                        # Thử pull lại
+                        pull_result = subprocess.run(['git', 'pull', '--rebase', 'origin', self.branch], capture_output=True, text=True)
+                        if pull_result.returncode != 0:
+                            logging.error("Conflict detected during rebase. Aborting rebase.")
+                            try:
+                                subprocess.check_call(['git', 'rebase', '--abort'])
+                            except subprocess.CalledProcessError as e:
+                                logging.error(f"Error aborting rebase: {e}")
+                            return  # Skip push
+                    else:
+                        logging.error("Conflict detected during rebase. Aborting rebase.")
+                        try:
+                            subprocess.check_call(['git', 'rebase', '--abort'])
+                        except subprocess.CalledProcessError as e:
+                            logging.error(f"Error aborting rebase: {e}")
+                        return  # Skip push
+                if "Already up to date" in pull_result.stdout:
+                    pull_needed = False
+                    logging.info("No pull needed (already up to date)")
             except subprocess.CalledProcessError as e:
-                logging.error(f"Error in git push: {e}")
+                logging.error(f"Error in git fetch: {e}")
+                return
 
+            # Push nếu pull thành công hoặc không cần pull
+            if not pull_needed or pull_result.returncode == 0:
+                try:
+                    subprocess.check_call(['git', 'push', '-u', 'origin', self.branch])
+                    logging.info("Pushed successfully")
+                except subprocess.CalledProcessError as e:
+                    logging.error(f"Error in git push: {e}")
+
+        # Reset pending lists
         self.pending_creates_file.clear()
         self.pending_creates_folder.clear()
         self.pending_changes_file.clear()
@@ -149,10 +187,12 @@ if __name__ == "__main__":
     monitor_path = os.path.abspath(args.path)
     if not os.path.isdir(monitor_path):
         print(f"Error: {monitor_path} is not a valid directory")
+        logging.error(f"Error: {monitor_path} is not a valid directory")
         sys.exit(1)
 
     if not os.path.exists(os.path.join(monitor_path, '.git')):
         print(f"Error: {monitor_path} is not a Git repository")
+        logging.error(f"Error: {monitor_path} is not a Git repository")
         sys.exit(1)
 
     os.chdir(monitor_path)
@@ -160,6 +200,7 @@ if __name__ == "__main__":
     logging.info(f"Monitoring directory: {monitor_path}")
 
     signal.signal(signal.SIGTERM, signal_handler)
+
     event_handler = GitHandler(branch=args.branch, debounce=args.delay)
     observer = Observer()
     observer.schedule(event_handler, path=monitor_path, recursive=True)

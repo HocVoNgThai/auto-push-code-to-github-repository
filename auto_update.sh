@@ -25,28 +25,31 @@ if [ -z "$MONITOR_PATH" ]; then
 fi
 
 if [ ! -d "$MONITOR_PATH" ]; then
-    echo "Error: $MONITOR_PATH is not a valid directory"
+    echo "Error: $MONITOR_PATH is not a valid directory" | tee -a auto_git.log
     exit 1
 fi
 
 if [ ! -d "$MONITOR_PATH/.git" ]; then
-    echo "Error: $MONITOR_PATH is not a Git repository"
+    echo "Error: $MONITOR_PATH is not a Git repository" | tee -a auto_git.log
     exit 1
 fi
 
 cd "$MONITOR_PATH" || exit 1
 echo "Monitoring directory: $MONITOR_PATH" | tee -a auto_git.log
+
 cleanup() {
-    echo "Stopping script..." | tee -a auto_git.log
+    echo "$(date): Stopping script..." | tee -a auto_git.log
     exit 0
 }
+
 trap cleanup SIGTERM SIGINT
+
 if command -v inotifywait >/dev/null 2>&1; then
     WATCH_TOOL="inotifywait"
 elif command -v fswatch >/dev/null 2>&1; then
     WATCH_TOOL="fswatch"
 else
-    echo "Error: Please install inotify-tools (Linux) or fswatch (macOS)" | tee -a auto_git.log
+    echo "$(date): Error: Please install inotify-tools (Linux) or fswatch (macOS)" | tee -a auto_git.log
     exit 1
 fi
 
@@ -95,7 +98,26 @@ generate_commit_message() {
     echo "$message"
 }
 
+handle_unstaged_changes() {
+    if [ -n "$(git status --porcelain | grep -v '^??')" ]; then
+        echo "$(date): Unstaged changes detected. Committing them..." | tee -a auto_git.log
+        git add .
+        if [ $? -ne 0 ]; then
+            echo "$(date): Error in git add for unstaged changes" | tee -a auto_git.log
+            return 1
+        fi
+        git commit -m "Auto commit unstaged changes"
+        if [ $? -ne 0 ]; then
+            echo "$(date): Error in committing unstaged changes" | tee -a auto_git.log
+            return 1
+        fi
+        echo "$(date): Committed unstaged changes" | tee -a auto_git.log
+    fi
+    return 0
+}
+
 commit_and_push() {
+    # Kiểm tra có thay đổi không
     if [ -n "$(git status --porcelain)" ]; then
         git add .
         if [ $? -ne 0 ]; then
@@ -113,35 +135,64 @@ commit_and_push() {
         fi
     fi
 
+    # Thử pull trước push
+    local pull_needed=true
     git fetch origin
     if [ $? -ne 0 ]; then
         echo "$(date): Error in git fetch" | tee -a auto_git.log
         return
     fi
-    git pull --rebase origin $BRANCH
+    pull_output=$(git pull --rebase origin $BRANCH 2>&1)
     if [ $? -ne 0 ]; then
-        echo "$(date): Conflict detected during rebase. Aborting rebase." | tee -a auto_git.log
-        git rebase --abort
-        return
+        echo "$(date): Pull failed: $pull_output" | tee -a auto_git.log
+        # Kiểm tra lỗi unstaged changes
+        if echo "$pull_output" | grep -q "You have unstaged changes"; then
+            handle_unstaged_changes
+            if [ $? -ne 0 ]; then
+                return
+            fi
+            pull_output=$(git pull --rebase origin $BRANCH 2>&1)
+            if [ $? -ne 0 ]; then
+                echo "$(date): Conflict detected during rebase. Aborting rebase." | tee -a auto_git.log
+                git rebase --abort
+                if [ $? -ne 0 ]; then
+                    echo "$(date): Error aborting rebase" | tee -a auto_git.log
+                fi
+                return
+            fi
+        else
+            echo "$(date): Conflict detected during rebase. Aborting rebase." | tee -a auto_git.log
+            git rebase --abort
+            if [ $? -ne 0 ]; then
+                echo "$(date): Error aborting rebase" | tee -a auto_git.log
+            fi
+            return 
+        fi
+    fi
+    if echo "$pull_output" | grep -q "Already up to date"; then
+        pull_needed=false
+        echo "$(date): No pull needed (already up to date)" | tee -a auto_git.log
     fi
 
-    git push -u origin $BRANCH
-    if [ $? -ne 0 ]; then
-        echo "$(date): Error in git push" | tee -a auto_git.log
-    else
-        echo "$(date): Pushed successfully" | tee -a auto_git.log
+    if [ "$pull_needed" = false ] || [ $? -eq 0 ]; then
+        git push origin $BRANCH
+        if [ $? -ne 0 ]; then
+            echo "$(date): Error in git push" | tee -a auto_git.log
+        else
+            echo "$(date): Pushed successfully" | tee -a auto_git.log
+        fi
     fi
 }
 
 if [ "$WATCH_TOOL" = "inotifywait" ]; then
     while true; do
-        inotifywait -r -e modify,create,delete,move --exclude '(\.git/|\.DS_Store|node_modules/)' .
-        sleep $DELAY  
+        inotifywait -r -e modify,create,delete,move --exclude '(\.git/|\.DS_Store|node_modules/|auto_git\.log)' .
+        sleep $DELAY 
         commit_and_push
     done
 elif [ "$WATCH_TOOL" = "fswatch" ]; then
-    fswatch -0 -r --exclude '\.git/|\.DS_Store|node_modules/' . | while read -d "" event; do
-        sleep $DELAY  
+    fswatch -0 -r --exclude '\.git/|\.DS_Store|node_modules/|auto_git\.log' . | while read -d "" event; do
+        sleep $DELAY
         commit_and_push
     done
 fi
