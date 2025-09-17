@@ -6,3 +6,4 @@ Stopping script...
 2025-09-17 15:34:03,749: Committed: Change file auto_git.log
 2025-09-17 15:34:04,449: Conflict detected during rebase. Aborting rebase.
 2025-09-17 15:34:04,451: Error aborting rebase: Command '['git', 'rebase', '--abort']' returned non-zero exit status 128.
+Monitoring directory: /home/th/auto-update-github-repo
