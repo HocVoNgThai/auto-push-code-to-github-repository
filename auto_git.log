@@ -27,3 +27,8 @@ Wed Sep 17 15:47:47 +07 2025: Conflict detected during rebase. Aborting rebase.
 Wed Sep 17 15:47:47 +07 2025: Error aborting rebase
 Wed Sep 17 15:48:47 +07 2025: Stopping script...
 2025-09-17 15:48:52,258: Monitoring directory: /home/th/auto-update-github-repo
+2025-09-17 15:48:58,335: Committed: Change file auto_git.log
+2025-09-17 15:48:59,063: Pull failed: error: cannot pull with rebase: You have unstaged changes.
+error: Please commit or stash them.
+
+2025-09-17 15:48:59,065: Unstaged changes detected. Committing them...
