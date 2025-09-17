@@ -1,41 +1,38 @@
 $ErrorActionPreference = "Stop"
 
-# Xử lý arguments
 param (
     [string]$Path = (Split-Path -Parent $MyInvocation.MyCommand.Path),
     [string]$Branch = "main",
-    [int]$Delay = 5
+    [int]$Delay = 10
 )
 
-# Chuyển đổi sang đường dẫn tuyệt đối
 $MonitorPath = (Resolve-Path $Path -ErrorAction Stop).Path
 
-# Kiểm tra xem đường dẫn có tồn tại và là thư mục không
+$LogFile = "$env:TEMP\auto_git_$(Get-Date -Format 'yyyyMMddHHmmss').log"
+
 if (-not (Test-Path $MonitorPath -PathType Container)) {
     Write-Error "$MonitorPath is not a valid directory"
+    Add-Content -Path $LogFile -Value "$(Get-Date): Error: $MonitorPath is not a valid directory"
     exit 1
 }
 
-# Kiểm tra xem thư mục có phải là Git repository không
 if (-not (Test-Path (Join-Path $MonitorPath ".git") -PathType Container)) {
     Write-Error "$MonitorPath is not a Git repository"
+    Add-Content -Path $LogFile -Value "$(Get-Date): Error: $MonitorPath is not a Git repository"
     exit 1
 }
 
-# Chuyển thư mục làm việc
 Set-Location $MonitorPath
 Write-Host "Monitoring directory: $MonitorPath"
-Add-Content -Path "auto_git.log" -Value "$(Get-Date): Monitoring directory: $MonitorPath"
+Add-Content -Path $LogFile -Value "$(Get-Date): Monitoring directory: $MonitorPath"
 
-# Hàm xử lý tín hiệu dừng (Ctrl+C)
 $Global:Running = $true
 $SIGINTHandler = {
-    Add-Content -Path "auto_git.log" -Value "$(Get-Date): Stopping script..."
+    Add-Content -Path $LogFile -Value "$(Get-Date): Stopping script..."
     $Global:Running = $false
 }
 Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action $SIGINTHandler
 
-# Tạo FileSystemWatcher
 $watcher = New-Object System.IO.FileSystemWatcher
 $watcher.Path = $MonitorPath
 $watcher.IncludeSubdirectories = $true
@@ -43,7 +40,6 @@ $watcher.EnableRaisingEvents = $true
 $watcher.Filter = "*.*"
 $watcher.NotifyFilter = [System.IO.NotifyFilters]::FileName -bor [System.IO.NotifyFilters]::DirectoryName -bor [System.IO.NotifyFilters]::LastWrite
 
-# Biến lưu trữ thay đổi
 $lastEventTime = Get-Date
 $debounceSeconds = $Delay
 $pendingCreatesFile = @{}
@@ -51,6 +47,46 @@ $pendingCreatesFolder = @{}
 $pendingChangesFile = @{}
 $pendingDeletesFile = @{}
 $pendingDeletesFolder = @{}
+
+function Handle-UnstagedChanges {
+    $gitStatus = git status --porcelain
+    if ($gitStatus | Where-Object { $_ -and -not $_.StartsWith('??') -and $_ -notmatch 'auto_git.*\.log' }) {
+        Add-Content -Path $LogFile -Value "$(Get-Date): Unstaged changes detected. Committing them..."
+        try {
+            git add .
+            if ($LASTEXITCODE -ne 0) {
+                throw "Error in git add"
+            }
+            git commit -m "Auto commit unstaged changes"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Error in git commit"
+            }
+            Add-Content -Path $LogFile -Value "$(Get-Date): Committed unstaged changes"
+        } catch {
+            Add-Content -Path $LogFile -Value "$(Get-Date): Error in committing unstaged changes: $_"
+            return $false
+        }
+    }
+    return $true
+}
+
+function Check-UpToDate {
+    try {
+        git fetch origin
+        if ($LASTEXITCODE -ne 0) {
+            throw "Error in git fetch"
+        }
+        $statusOutput = git status
+        if ($statusOutput -match "Your branch is up to date with 'origin/$Branch'") {
+            Add-Content -Path $LogFile -Value "$(Get-Date): No pull needed (already up to date)"
+            return $true
+        }
+    } catch {
+        Add-Content -Path $LogFile -Value "$(Get-Date): Error in git fetch: $_"
+        return $false
+    }
+    return $false
+}
 
 function Generate-CommitMessage {
     $createsFile = @()
@@ -64,8 +100,11 @@ function Generate-CommitMessage {
         foreach ($line in $gitStatus) {
             $status, $path = $line -split '\s+',2
             $path = $path.Trim()
+            if ($path -match 'auto_git.*\.log') {
+                continue
+            }
             $name = [System.IO.Path]::GetFileName($path)
-            if (Test-Path $path -PathType Container) {
+            if (Test-Path $path -PathType Container -ErrorAction SilentlyContinue) {
                 if ($status -eq 'A') {
                     $createsFolder += $name
                 } elseif ($status -eq 'D') {
@@ -84,7 +123,7 @@ function Generate-CommitMessage {
                 $oldPath, $newPath = $path -split ' -> '
                 $oldName = [System.IO.Path]::GetFileName($oldPath)
                 $newName = [System.IO.Path]::GetFileName($newPath)
-                if (Test-Path $newPath -PathType Container) {
+                if (Test-Path $newPath -PathType Container -ErrorAction SilentlyContinue) {
                     $deletesFolder += $oldName
                     $createsFolder += $newName
                 } else {
@@ -125,40 +164,45 @@ function Commit-AndPush {
     if ($gitStatus) {
         git add .
         if ($LASTEXITCODE -ne 0) {
-            Add-Content -Path "auto_git.log" -Value "$(Get-Date): Error in git add"
+            Add-Content -Path $LogFile -Value "$(Get-Date): Error in git add"
             return
         }
         $commitMessage = Generate-CommitMessage
         if ($commitMessage) {
             git commit -m $commitMessage
             if ($LASTEXITCODE -ne 0) {
-                Add-Content -Path "auto_git.log" -Value "$(Get-Date): Error in git commit: $commitMessage"
+                Add-Content -Path $LogFile -Value "$(Get-Date): Error in git commit: $commitMessage"
                 return
             }
-            Add-Content -Path "auto_git.log" -Value "$(Get-Date): Committed: $commitMessage"
+            Add-Content -Path $LogFile -Value "$(Get-Date): Committed: $commitMessage"
         }
     }
 
-    git fetch origin
-    if ($LASTEXITCODE -ne 0) {
-        Add-Content -Path "auto_git.log" -Value "$(Get-Date): Error in git fetch"
+    if (Check-UpToDate) {
+        git push -u origin $Branch
+        if ($LASTEXITCODE -ne 0) {
+            Add-Content -Path $LogFile -Value "$(Get-Date): Error in git push"
+        } else {
+            Add-Content -Path $LogFile -Value "$(Get-Date): Pushed successfully"
+        }
         return
     }
-    git pull --rebase origin $Branch
+
+    # Thử pull với --ff-only
+    if (-not (Handle-UnstagedChanges)) {
+        return
+    }
+    $pullOutput = git pull --ff-only origin $Branch 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Add-Content -Path "auto_git.log" -Value "$(Get-Date): Conflict detected during rebase. Aborting rebase."
-        git rebase --abort
-        if ($LASTEXITCODE -ne 0) {
-            Add-Content -Path "auto_git.log" -Value "$(Get-Date): Error aborting rebase"
-        }
-        return  
+        Add-Content -Path $LogFile -Value "$(Get-Date): Pull failed: $pullOutput"
+        return  # Skip push
     }
 
     git push -u origin $Branch
     if ($LASTEXITCODE -ne 0) {
-        Add-Content -Path "auto_git.log" -Value "$(Get-Date): Error in git push"
+        Add-Content -Path $LogFile -Value "$(Get-Date): Error in git push"
     } else {
-        Add-Content -Path "auto_git.log" -Value "$(Get-Date): Pushed successfully"
+        Add-Content -Path $LogFile -Value "$(Get-Date): Pushed successfully"
     }
 }
 
@@ -168,7 +212,7 @@ $action = {
     $fullPath = $Event.SourceEventArgs.FullPath
     $isDirectory = Test-Path $fullPath -PathType Container -ErrorAction SilentlyContinue
 
-    if ($name -notmatch '(\.git\\|\.DS_Store|node_modules\\)') {
+    if ($name -notmatch '(\.git\\|\.DS_Store|node_modules\\|auto_git.*\.log)') {
         if ($isDirectory) {
             if ($changeType -eq "Created") {
                 $script:pendingCreatesFolder[$name] = $true
@@ -196,7 +240,7 @@ Register-ObjectEvent $watcher "Renamed" -Action {
     $newName = $Event.SourceEventArgs.Name
     $fullPath = $Event.SourceEventArgs.FullPath
     $isDirectory = Test-Path $fullPath -PathType Container -ErrorAction SilentlyContinue
-    if ($oldName -notmatch '(\.git\\|\.DS_Store|node_modules\\)') {
+    if ($oldName -notmatch '(\.git\\|\.DS_Store|node_modules\\|auto_git.*\.log)') {
         if ($isDirectory) {
             $script:pendingDeletesFolder[$oldName] = $true
             $script:pendingCreatesFolder[$newName] = $true
@@ -207,6 +251,7 @@ Register-ObjectEvent $watcher "Renamed" -Action {
         Commit-AndPush
     }
 }
+
 try {
     while ($Global:Running) {
         Start-Sleep -Seconds 1
