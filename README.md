@@ -100,6 +100,6 @@ kill $(pgrep -f "python3 auto_update.py")
 - Copy `.gitignore` file to your folder and chose which types of file you dont want to push to github repo.
 
 ---
-## Updating 🔁
-Update soon...
+## Update 🔁
+Update script and tutorial for Windows as soon as I can
 
