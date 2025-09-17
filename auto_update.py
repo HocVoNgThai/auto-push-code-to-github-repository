@@ -8,10 +8,11 @@ import logging
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
+# Thiết lập logging
 logging.basicConfig(filename='auto_git.log', level=logging.INFO, format='%(asctime)s: %(message)s')
 
 class GitHandler(FileSystemEventHandler):
-    def __init__(self, branch='main', debounce=5):
+    def __init__(self, branch='main', debounce=10):
         self.last_event = 0
         self.debounce = debounce
         self.branch = branch
@@ -58,15 +59,29 @@ class GitHandler(FileSystemEventHandler):
                 return False
         return True
 
+    def check_up_to_date(self):
+        try:
+            subprocess.check_call(['git', 'fetch', 'origin'])
+            status_result = subprocess.run(['git', 'status'], capture_output=True, text=True)
+            if "Your branch is up to date with 'origin/" + self.branch + "'" in status_result.stdout:
+                logging.info("No pull needed (already up to date)")
+                return True
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Error in git fetch: {e}")
+            return False
+        return False
+
     def process_changes(self):
         if time.time() - self.last_event < self.debounce:
             return
         self.last_event = time.time()
 
+        # Kiểm tra có thay đổi không
         result = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True)
         if not result.stdout:
             return
 
+        # Tạo commit message
         creates_file = []
         creates_folder = []
         changes_file = []
@@ -88,6 +103,7 @@ class GitHandler(FileSystemEventHandler):
                     changes_file.append(name)
                 elif status == 'D':
                     deletes_file.append(name)
+            # Xử lý trường hợp rename (move)
             if status.startswith('R'):
                 old_path, new_path = path.split(' -> ')
                 old_name = os.path.basename(old_path)
@@ -110,6 +126,7 @@ class GitHandler(FileSystemEventHandler):
             message += "Delete file " + ", ".join(deletes_file) + ";"
         if deletes_folder:
             message += "Delete folder " + ", ".join(deletes_folder) + ";"
+        # Xóa dấu chấm phẩy cuối
         message = message.rstrip(";")
 
         if message:
@@ -121,45 +138,34 @@ class GitHandler(FileSystemEventHandler):
                 logging.error(f"Error in git add/commit: {e}")
                 return
 
-            pull_needed = True
-            try:
-                subprocess.check_call(['git', 'fetch', 'origin'])
-                pull_result = subprocess.run(['git', 'pull', '--rebase', 'origin', self.branch], capture_output=True, text=True)
-                if pull_result.returncode != 0:
-                    logging.error(f"Pull failed: {pull_result.stderr}")
-                    if "You have unstaged changes" in pull_result.stderr:
-                        if not self.handle_unstaged_changes():
-                            return
-                        # Thử pull lại
-                        pull_result = subprocess.run(['git', 'pull', '--rebase', 'origin', self.branch], capture_output=True, text=True)
-                        if pull_result.returncode != 0:
-                            logging.error("Conflict detected during rebase. Aborting rebase.")
-                            try:
-                                subprocess.check_call(['git', 'rebase', '--abort'])
-                            except subprocess.CalledProcessError as e:
-                                logging.error(f"Error aborting rebase: {e}")
-                            return  # Skip push
-                    else:
-                        logging.error("Conflict detected during rebase. Aborting rebase.")
-                        try:
-                            subprocess.check_call(['git', 'rebase', '--abort'])
-                        except subprocess.CalledProcessError as e:
-                            logging.error(f"Error aborting rebase: {e}")
-                        return  # Skip push
-                if "Already up to date" in pull_result.stdout:
-                    pull_needed = False
-                    logging.info("No pull needed (already up to date)")
-            except subprocess.CalledProcessError as e:
-                logging.error(f"Error in git fetch: {e}")
-                return
-
-            # Push nếu pull thành công hoặc không cần pull
-            if not pull_needed or pull_result.returncode == 0:
+            # Kiểm tra trạng thái up-to-date
+            if self.check_up_to_date():
+                # Không cần pull, push trực tiếp
                 try:
-                    subprocess.check_call(['git', 'push', '-u', 'origin', self.branch])
+                    subprocess.check_call(['git', 'push', 'origin', self.branch])
                     logging.info("Pushed successfully")
                 except subprocess.CalledProcessError as e:
                     logging.error(f"Error in git push: {e}")
+                return
+
+            # Thử pull với --ff-only
+            if not self.handle_unstaged_changes():
+                return
+            try:
+                pull_result = subprocess.run(['git', 'pull', '--ff-only', 'origin', self.branch], capture_output=True, text=True)
+                if pull_result.returncode != 0:
+                    logging.error(f"Pull failed: {pull_result.stderr}")
+                    return  # Skip push
+            except subprocess.CalledProcessError as e:
+                logging.error(f"Pull failed: {e}")
+                return
+
+            # Push sau khi pull thành công
+            try:
+                subprocess.check_call(['git', 'push', 'origin', self.branch])
+                logging.info("Pushed successfully")
+            except subprocess.CalledProcessError as e:
+                logging.error(f"Error in git push: {e}")
 
         # Reset pending lists
         self.pending_creates_file.clear()
@@ -169,6 +175,7 @@ class GitHandler(FileSystemEventHandler):
         self.pending_deletes_folder.clear()
 
     def on_any_event(self, event):
+        # Gọi process_changes sau mỗi sự kiện, với delay
         self.process_changes()
 
 def signal_handler(sig, frame):
@@ -177,11 +184,12 @@ def signal_handler(sig, frame):
     sys.exit(0)
 
 if __name__ == "__main__":
+    # Xử lý argument
     parser = argparse.ArgumentParser(description="Auto commit and push changes in a specified directory")
     parser.add_argument('path', type=str, nargs='?', default=os.path.dirname(os.path.abspath(__file__)),
                         help='Path to the directory to monitor (default: script directory)')
     parser.add_argument('--branch', default='main', help='Git branch to use (default: main)')
-    parser.add_argument('--delay', type=int, default=5, help='Delay in seconds (default: 5)')
+    parser.add_argument('--delay', type=int, default=10, help='Delay in seconds (default: 10)')
     args = parser.parse_args()
 
     monitor_path = os.path.abspath(args.path)
