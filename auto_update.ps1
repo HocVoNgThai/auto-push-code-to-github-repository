@@ -33,9 +33,8 @@ $watcher.EnableRaisingEvents = $true
 $watcher.Filter = "*.*"
 $watcher.NotifyFilter = [System.IO.NotifyFilters]::FileName -bor [System.IO.NotifyFilters]::DirectoryName -bor [System.IO.NotifyFilters]::LastWrite
 
-# Biến lưu trữ thay đổi
 $lastEventTime = Get-Date
-$debounceSeconds = 5
+$debounceSeconds = 10
 $pendingCreatesFile = @{}
 $pendingCreatesFolder = @{}
 $pendingChangesFile = @{}
