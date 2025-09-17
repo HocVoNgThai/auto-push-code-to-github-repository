@@ -177,7 +177,6 @@ function Commit-AndPush {
             Add-Content -Path $LogFile -Value "$(Get-Date): Committed: $commitMessage"
         }
     }
-
     if (Check-UpToDate) {
         git push origin $Branch
         if ($LASTEXITCODE -ne 0) {
@@ -187,7 +186,6 @@ function Commit-AndPush {
         }
         return
     }
-
     if (-not (Handle-UnstagedChanges)) {
         return
     }
@@ -202,7 +200,6 @@ function Commit-AndPush {
             return
         }
     }
-
     git push origin $Branch
     if ($LASTEXITCODE -ne 0) {
         Add-Content -Path $LogFile -Value "$(Get-Date): Error in git push"
