@@ -187,7 +187,7 @@ if __name__ == "__main__":
     parser.add_argument('path', type=str, nargs='?', default=os.path.dirname(os.path.abspath(__file__)),
                         help='Path to the directory to monitor (default: script directory)')
     parser.add_argument('--branch', default='main', help='Git branch to use (default: main)')
-    parser.add_argument('--delay', type=int, default=10, help='Delay in seconds (default: 10)')
+    parser.add_argument('--delay', type=int, default=5, help='Delay in seconds (default: 10)')
     args = parser.parse_args()
 
     monitor_path = os.path.abspath(args.path)
