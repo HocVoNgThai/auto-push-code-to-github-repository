@@ -8,7 +8,6 @@ import logging
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-# Thiết lập logging
 LOG_FILE = f"/tmp/auto_git_{int(time.time())}.log"
 logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s: %(message)s')
 
