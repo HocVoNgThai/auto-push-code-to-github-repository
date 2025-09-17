@@ -35,3 +35,8 @@ error: Please commit or stash them.
 2025-09-17 15:48:59,079: Committed unstaged changes
 2025-09-17 15:48:59,081: Conflict detected during rebase. Aborting rebase.
 2025-09-17 15:48:59,082: Error aborting rebase: Command '['git', 'rebase', '--abort']' returned non-zero exit status 128.
+2025-09-17 15:49:42,129: Committed: Change file auto_git.log
+2025-09-17 15:49:43,867: Pull failed: error: cannot pull with rebase: You have unstaged changes.
+error: Please commit or stash them.
+
+2025-09-17 15:49:43,869: Unstaged changes detected. Committing them...

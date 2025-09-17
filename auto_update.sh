@@ -175,7 +175,7 @@ commit_and_push() {
     fi
 
     if [ "$pull_needed" = false ] || [ $? -eq 0 ]; then
-        git push origin $BRANCH
+        git push -u origin $BRANCH
         if [ $? -ne 0 ]; then
             echo "$(date): Error in git push" | tee -a auto_git.log
         else
