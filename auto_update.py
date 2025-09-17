@@ -11,25 +11,35 @@ class GitHandler(FileSystemEventHandler):
     def __init__(self):
         self.last_event = 0
         self.debounce = 5 
-        self.pending_changes = set()
-        self.pending_deletes = set()
+        self.pending_creates_file = set()
+        self.pending_creates_folder = set()
+        self.pending_changes_file = set()
+        self.pending_deletes_file = set()
+        self.pending_deletes_folder = set()
 
     def on_created(self, event):
-        if not event.is_directory:
-            self.pending_changes.add(event.src_path)
+        if event.is_directory:
+            self.pending_creates_folder.add(event.src_path)
+        else:
+            self.pending_creates_file.add(event.src_path)
 
     def on_modified(self, event):
         if not event.is_directory:
-            self.pending_changes.add(event.src_path)
+            self.pending_changes_file.add(event.src_path)
 
     def on_deleted(self, event):
-        if not event.is_directory:
-            self.pending_deletes.add(event.src_path)
+        if event.is_directory:
+            self.pending_deletes_folder.add(event.src_path)
+        else:
+            self.pending_deletes_file.add(event.src_path)
 
     def on_moved(self, event):
-        if not event.is_directory:
-            self.pending_deletes.add(event.src_path)
-            self.pending_changes.add(event.dest_path)
+        if event.is_directory:
+            self.pending_deletes_folder.add(event.src_path)
+            self.pending_creates_folder.add(event.dest_path)
+        else:
+            self.pending_deletes_file.add(event.src_path)
+            self.pending_creates_file.add(event.dest_path)
 
     def process_changes(self):
         if time.time() - self.last_event < self.debounce:
@@ -40,32 +50,51 @@ class GitHandler(FileSystemEventHandler):
         if not result.stdout:
             return
 
-        changes = []
-        deletes = []
+        creates_file = []
+        creates_folder = []
+        changes_file = []
+        deletes_file = []
+        deletes_folder = []
         for line in result.stdout.splitlines():
-            status, file = line.split(maxsplit=1)
-            file = file.strip()
-            if status in ('M', 'A'):
-                changes.append(os.path.basename(file))
-            elif status == 'D':
-                deletes.append(os.path.basename(file))
+            status, path = line.split(maxsplit=1)
+            path = path.strip()
+            name = os.path.basename(path)
+            if os.path.isdir(path):
+                if status == 'A':
+                    creates_folder.append(name)
+                elif status == 'D':
+                    deletes_folder.append(name)
+            else:
+                if status == 'A':
+                    creates_file.append(name)
+                elif status == 'M':
+                    changes_file.append(name)
+                elif status == 'D':
+                    deletes_file.append(name)
 
         message = ""
-        if changes:
-            message += "Change " + ", ".join(changes)
-        if deletes:
-            if message:
-                message += "; Delete " + ", ".join(deletes)
-            else:
-                message = "Delete " + ", ".join(deletes)
+        if creates_file:
+            message += "Create file " + ", ".join(creates_file) + ";"
+        if creates_folder:
+            message += "Create folder " + ", ".join(creates_folder) + ";"
+        if changes_file:
+            message += "Change file " + ", ".join(changes_file) + ";"
+        if deletes_file:
+            message += "Delete file " + ", ".join(deletes_file) + ";"
+        if deletes_folder:
+            message += "Delete folder " + ", ".join(deletes_folder) + ";"
+        message = message.rstrip(";")
 
         if message:
             subprocess.run(['git', 'add', '.'])
             subprocess.run(['git', 'commit', '-m', message])
-            subprocess.run(['git', 'push', '-u','origin', 'main'])
+            subprocess.run(['git', 'push', '-u', 'origin', 'main'])
 
-        self.pending_changes.clear()
-        self.pending_deletes.clear()
+        self.pending_creates_file.clear()
+        self.pending_creates_folder.clear()
+        self.pending_changes_file.clear()
+        self.pending_deletes_file.clear()
+        self.pending_deletes_folder.clear()
 
     def on_any_event(self, event):
         self.process_changes()
