@@ -1,6 +1,6 @@
 #!/bin/bash
 BRANCH="main"
-DELAY=5
+DELAY=10
 MONITOR_PATH=""
 
 while [[ $# -gt 0 ]]; do
@@ -116,8 +116,21 @@ handle_unstaged_changes() {
     return 0
 }
 
+check_up_to_date() {
+    git fetch origin
+    if [ $? -ne 0 ]; then
+        echo "$(date): Error in git fetch" | tee -a auto_git.log
+        return 1
+    fi
+    local status_output=$(git status)
+    if echo "$status_output" | grep -q "Your branch is up to date with 'origin/$BRANCH'"; then
+        echo "$(date): No pull needed (already up to date)" | tee -a auto_git.log
+        return 0
+    fi
+    return 1
+}
+
 commit_and_push() {
-    # Kiểm tra có thay đổi không
     if [ -n "$(git status --porcelain)" ]; then
         git add .
         if [ $? -ne 0 ]; then
@@ -135,64 +148,44 @@ commit_and_push() {
         fi
     fi
 
-    # Thử pull trước push
-    local pull_needed=true
-    git fetch origin
-    if [ $? -ne 0 ]; then
-        echo "$(date): Error in git fetch" | tee -a auto_git.log
-        return
-    fi
-    pull_output=$(git pull --rebase origin $BRANCH 2>&1)
-    if [ $? -ne 0 ]; then
-        echo "$(date): Pull failed: $pull_output" | tee -a auto_git.log
-        # Kiểm tra lỗi unstaged changes
-        if echo "$pull_output" | grep -q "You have unstaged changes"; then
-            handle_unstaged_changes
-            if [ $? -ne 0 ]; then
-                return
-            fi
-            pull_output=$(git pull --rebase origin $BRANCH 2>&1)
-            if [ $? -ne 0 ]; then
-                echo "$(date): Conflict detected during rebase. Aborting rebase." | tee -a auto_git.log
-                git rebase --abort
-                if [ $? -ne 0 ]; then
-                    echo "$(date): Error aborting rebase" | tee -a auto_git.log
-                fi
-                return
-            fi
-        else
-            echo "$(date): Conflict detected during rebase. Aborting rebase." | tee -a auto_git.log
-            git rebase --abort
-            if [ $? -ne 0 ]; then
-                echo "$(date): Error aborting rebase" | tee -a auto_git.log
-            fi
-            return 
-        fi
-    fi
-    if echo "$pull_output" | grep -q "Already up to date"; then
-        pull_needed=false
-        echo "$(date): No pull needed (already up to date)" | tee -a auto_git.log
-    fi
-
-    if [ "$pull_needed" = false ] || [ $? -eq 0 ]; then
-        git push -u origin $BRANCH
+    if check_up_to_date; then
+        git push origin $BRANCH
         if [ $? -ne 0 ]; then
             echo "$(date): Error in git push" | tee -a auto_git.log
         else
             echo "$(date): Pushed successfully" | tee -a auto_git.log
         fi
+        return
+    fi
+
+    handle_unstaged_changes
+    if [ $? -ne 0 ]; then
+        return
+    fi
+    pull_output=$(git pull --ff-only origin $BRANCH 2>&1)
+    if [ $? -ne 0 ]; then
+        echo "$(date): Pull failed: $pull_output" | tee -a auto_git.log
+        return  # Skip push
+    fi
+
+    # Push sau khi pull thành công
+    git push origin $BRANCH
+    if [ $? -ne 0 ]; then
+        echo "$(date): Error in git push" | tee -a auto_git.log
+    else
+        echo "$(date): Pushed successfully" | tee -a auto_git.log
     fi
 }
 
 if [ "$WATCH_TOOL" = "inotifywait" ]; then
     while true; do
         inotifywait -r -e modify,create,delete,move --exclude '(\.git/|\.DS_Store|node_modules/|auto_git\.log)' .
-        sleep $DELAY 
+        sleep $DELAY  
         commit_and_push
     done
 elif [ "$WATCH_TOOL" = "fswatch" ]; then
     fswatch -0 -r --exclude '\.git/|\.DS_Store|node_modules/|auto_git\.log' . | while read -d "" event; do
-        sleep $DELAY
+        sleep $DELAY  
         commit_and_push
     done
 fi
