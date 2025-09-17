@@ -9,7 +9,8 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 # Thiết lập logging
-logging.basicConfig(filename='auto_git.log', level=logging.INFO, format='%(asctime)s: %(message)s')
+LOG_FILE = f"/tmp/auto_git_{int(time.time())}.log"
+logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s: %(message)s')
 
 class GitHandler(FileSystemEventHandler):
     def __init__(self, branch='main', debounce=10):
@@ -48,7 +49,7 @@ class GitHandler(FileSystemEventHandler):
 
     def handle_unstaged_changes(self):
         result = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True)
-        if any(line and not line.startswith('??') for line in result.stdout.splitlines()):
+        if any(line and not line.startswith('??') and 'auto_git' not in line for line in result.stdout.splitlines()):
             logging.info("Unstaged changes detected. Committing them...")
             try:
                 subprocess.check_call(['git', 'add', '.'])
@@ -76,12 +77,10 @@ class GitHandler(FileSystemEventHandler):
             return
         self.last_event = time.time()
 
-        # Kiểm tra có thay đổi không
         result = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True)
         if not result.stdout:
             return
 
-        # Tạo commit message
         creates_file = []
         creates_folder = []
         changes_file = []
@@ -91,6 +90,8 @@ class GitHandler(FileSystemEventHandler):
             status, path = line.split(maxsplit=1)
             path = path.strip()
             name = os.path.basename(path)
+            if 'auto_git' in path:
+                continue
             if os.path.isdir(path):
                 if status == 'A':
                     creates_folder.append(name)
@@ -103,7 +104,6 @@ class GitHandler(FileSystemEventHandler):
                     changes_file.append(name)
                 elif status == 'D':
                     deletes_file.append(name)
-            # Xử lý trường hợp rename (move)
             if status.startswith('R'):
                 old_path, new_path = path.split(' -> ')
                 old_name = os.path.basename(old_path)
@@ -126,7 +126,6 @@ class GitHandler(FileSystemEventHandler):
             message += "Delete file " + ", ".join(deletes_file) + ";"
         if deletes_folder:
             message += "Delete folder " + ", ".join(deletes_folder) + ";"
-        # Xóa dấu chấm phẩy cuối
         message = message.rstrip(";")
 
         if message:
@@ -138,17 +137,14 @@ class GitHandler(FileSystemEventHandler):
                 logging.error(f"Error in git add/commit: {e}")
                 return
 
-            # Kiểm tra trạng thái up-to-date
             if self.check_up_to_date():
-                # Không cần pull, push trực tiếp
                 try:
-                    subprocess.check_call(['git', 'push', 'origin', self.branch])
+                    subprocess.check_call(['git', 'push', '-u', 'origin', self.branch])
                     logging.info("Pushed successfully")
                 except subprocess.CalledProcessError as e:
                     logging.error(f"Error in git push: {e}")
                 return
 
-            # Thử pull với --ff-only
             if not self.handle_unstaged_changes():
                 return
             try:
@@ -160,9 +156,8 @@ class GitHandler(FileSystemEventHandler):
                 logging.error(f"Pull failed: {e}")
                 return
 
-            # Push sau khi pull thành công
             try:
-                subprocess.check_call(['git', 'push', 'origin', self.branch])
+                subprocess.check_call(['git', 'push', '-u', 'origin', self.branch])
                 logging.info("Pushed successfully")
             except subprocess.CalledProcessError as e:
                 logging.error(f"Error in git push: {e}")
@@ -175,7 +170,6 @@ class GitHandler(FileSystemEventHandler):
         self.pending_deletes_folder.clear()
 
     def on_any_event(self, event):
-        # Gọi process_changes sau mỗi sự kiện, với delay
         self.process_changes()
 
 def signal_handler(sig, frame):
@@ -184,7 +178,6 @@ def signal_handler(sig, frame):
     sys.exit(0)
 
 if __name__ == "__main__":
-    # Xử lý argument
     parser = argparse.ArgumentParser(description="Auto commit and push changes in a specified directory")
     parser.add_argument('path', type=str, nargs='?', default=os.path.dirname(os.path.abspath(__file__)),
                         help='Path to the directory to monitor (default: script directory)')
