@@ -1,8 +1,27 @@
 #!/bin/bash
-if [ -z "$1" ]; then
+BRANCH="main"
+DELAY=5
+MONITOR_PATH=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --branch)
+            BRANCH="$2"
+            shift 2
+            ;;
+        --delay)
+            DELAY="$2"
+            shift 2
+            ;;
+        *)
+            MONITOR_PATH=$(realpath "$1")
+            shift
+            ;;
+    esac
+done
+
+if [ -z "$MONITOR_PATH" ]; then
     MONITOR_PATH=$(dirname "$(realpath "$0")")
-else
-    MONITOR_PATH=$(realpath "$1")
 fi
 
 if [ ! -d "$MONITOR_PATH" ]; then
@@ -16,21 +35,18 @@ if [ ! -d "$MONITOR_PATH/.git" ]; then
 fi
 
 cd "$MONITOR_PATH" || exit 1
-echo "Monitoring directory: $MONITOR_PATH"
-
+echo "Monitoring directory: $MONITOR_PATH" | tee -a auto_git.log
 cleanup() {
-    echo "Stopping script..."
+    echo "Stopping script..." | tee -a auto_git.log
     exit 0
 }
-
 trap cleanup SIGTERM SIGINT
-
 if command -v inotifywait >/dev/null 2>&1; then
     WATCH_TOOL="inotifywait"
 elif command -v fswatch >/dev/null 2>&1; then
     WATCH_TOOL="fswatch"
 else
-    echo "Error: Please install inotify-tools (Linux) or fswatch (macOS)"
+    echo "Error: Please install inotify-tools (Linux) or fswatch (macOS)" | tee -a auto_git.log
     exit 1
 fi
 
@@ -40,6 +56,7 @@ generate_commit_message() {
     local changes_file=""
     local deletes_file=""
     local deletes_folder=""
+    
     while IFS= read -r line; do
         status=$(echo "$line" | awk '{print $1}')
         path=$(echo "$line" | awk '{print $2}')
@@ -81,23 +98,50 @@ generate_commit_message() {
 commit_and_push() {
     if [ -n "$(git status --porcelain)" ]; then
         git add .
+        if [ $? -ne 0 ]; then
+            echo "$(date): Error in git add" | tee -a auto_git.log
+            return
+        fi
         commit_message=$(generate_commit_message)
         if [ -n "$commit_message" ]; then
             git commit -m "$commit_message"
-            git push -u origin main
+            if [ $? -ne 0 ]; then
+                echo "$(date): Error in git commit: $commit_message" | tee -a auto_git.log
+                return
+            fi
+            echo "$(date): Committed: $commit_message" | tee -a auto_git.log
         fi
+    fi
+
+    git fetch origin
+    if [ $? -ne 0 ]; then
+        echo "$(date): Error in git fetch" | tee -a auto_git.log
+        return
+    fi
+    git pull --rebase origin $BRANCH
+    if [ $? -ne 0 ]; then
+        echo "$(date): Conflict detected during rebase. Aborting rebase." | tee -a auto_git.log
+        git rebase --abort
+        return
+    fi
+
+    git push -u origin $BRANCH
+    if [ $? -ne 0 ]; then
+        echo "$(date): Error in git push" | tee -a auto_git.log
+    else
+        echo "$(date): Pushed successfully" | tee -a auto_git.log
     fi
 }
 
 if [ "$WATCH_TOOL" = "inotifywait" ]; then
     while true; do
         inotifywait -r -e modify,create,delete,move --exclude '(\.git/|\.DS_Store|node_modules/)' .
-        sleep 5  
+        sleep $DELAY  
         commit_and_push
     done
 elif [ "$WATCH_TOOL" = "fswatch" ]; then
     fswatch -0 -r --exclude '\.git/|\.DS_Store|node_modules/' . | while read -d "" event; do
-        sleep 5 
+        sleep $DELAY  
         commit_and_push
     done
 fi
