@@ -1,5 +1,4 @@
 #!/bin/bash
-
 if [ -z "$1" ]; then
     MONITOR_PATH=$(dirname "$(realpath "$0")")
 else
@@ -36,33 +35,46 @@ else
 fi
 
 generate_commit_message() {
-    local changes=""
-    local deletes=""
-    
+    local creates_file=""
+    local creates_folder=""
+    local changes_file=""
+    local deletes_file=""
+    local deletes_folder=""
     while IFS= read -r line; do
         status=$(echo "$line" | awk '{print $1}')
-        file=$(echo "$line" | awk '{print $2}')
-        if [ "$status" = "M" ] || [ "$status" = "A" ]; then
-            changes="$changes$file, "
-        elif [ "$status" = "D" ]; then
-            deletes="$deletes$file, "
+        path=$(echo "$line" | awk '{print $2}')
+        name=$(basename "$path")
+        if [ -d "$path" ]; then
+            if [ "$status" = "A" ]; then
+                creates_folder="$creates_folder$name, "
+            elif [ "$status" = "D" ]; then
+                deletes_folder="$deletes_folder$name, "
+            fi
+        else
+            if [ "$status" = "A" ]; then
+                creates_file="$creates_file$name, "
+            elif [ "$status" = "M" ]; then
+                changes_file="$changes_file$name, "
+            elif [ "$status" = "D" ]; then
+                deletes_file="$deletes_file$name, "
+            fi
         fi
     done < <(git status --porcelain)
 
-    changes=${changes%, }
-    deletes=${deletes%, }
+    creates_file=${creates_file%, }
+    creates_folder=${creates_folder%, }
+    changes_file=${changes_file%, }
+    deletes_file=${deletes_file%, }
+    deletes_folder=${deletes_folder%, }
 
     local message=""
-    if [ -n "$changes" ]; then
-        message="Change $changes"
-    fi
-    if [ -n "$deletes" ]; then
-        if [ -n "$message" ]; then
-            message="$message; Delete $deletes"
-        else
-            message="Delete $deletes"
-        fi
-    fi
+    [ -n "$creates_file" ] && message="$message Create file $creates_file;"
+    [ -n "$creates_folder" ] && message="$message Create folder $creates_folder;"
+    [ -n "$changes_file" ] && message="$message Change file $changes_file;"
+    [ -n "$deletes_file" ] && message="$message Delete file $deletes_file;"
+    [ -n "$deletes_folder" ] && message="$message Delete folder $deletes_folder;"
+    message=${message%;}
+
     echo "$message"
 }
 
