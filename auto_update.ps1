@@ -161,7 +161,7 @@ function Commit-AndPush {
     $script:lastEventTime = Get-Date
 
     $gitStatus = git status --porcelain
-    if ($gitStatus) {
+    if ($gitStatus -and ($gitStatus | Where-Object { $_ -notmatch 'auto_git.*\.log' })) {
         git add .
         if ($LASTEXITCODE -ne 0) {
             Add-Content -Path $LogFile -Value "$(Get-Date): Error in git add"
@@ -179,7 +179,7 @@ function Commit-AndPush {
     }
 
     if (Check-UpToDate) {
-        git push -u origin $Branch
+        git push origin $Branch
         if ($LASTEXITCODE -ne 0) {
             Add-Content -Path $LogFile -Value "$(Get-Date): Error in git push"
         } else {
@@ -188,17 +188,22 @@ function Commit-AndPush {
         return
     }
 
-    # Thử pull với --ff-only
     if (-not (Handle-UnstagedChanges)) {
         return
     }
     $pullOutput = git pull --ff-only origin $Branch 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Add-Content -Path $LogFile -Value "$(Get-Date): Pull failed: $pullOutput"
-        return  # Skip push
+        Add-Content -Path $LogFile -Value "$(Get-Date): Pull failed (fast-forward): $pullOutput"
+        $pullOutput = git pull --rebase origin $Branch 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Add-Content -Path $LogFile -Value "$(Get-Date): Pull failed (rebase): $pullOutput"
+            Add-Content -Path $LogFile -Value "$(Get-Date): Resolve conflict manually with 'git rebase origin/$Branch' or 'git merge origin/$Branch'"
+            git rebase --abort 2>&1 | Out-Null
+            return
+        }
     }
 
-    git push -u origin $Branch
+    git push origin $Branch
     if ($LASTEXITCODE -ne 0) {
         Add-Content -Path $LogFile -Value "$(Get-Date): Error in git push"
     } else {
