@@ -75,23 +75,28 @@ cd auto-push-code-to-github-repository
   - Bash script:
 ```
 chmod +x auto_update.sh
-./auto_update.sh /path/to/your/repo
+./auto_update.sh /path/to/your/repo --branch <branch-name> --delay <delay-time>
 ```
   - Python script:
 ```
-python3 auto_update.py /path/to/your/repo
+python3 auto_update.py /path/to/your/repo --branch <branch-name> --delay <delay-time>
 ```
   - Using `nohup` to run as a background process:
 ```
-nohup ./auto_update.sh /path/to/your/repo &
-nohup python3 auto_update.py /path/to/your/repo &
+nohup ./auto_update.sh /path/to/your/repo --branch <branch-name> --delay <delay-time> &
+nohup python3 auto_update.py /path/to/your/repo --branch <branch-name> --delay <delay-time> &
+```
+  - By default, when you run the file without any arguments, it will set the directory to be tracked as the one containing the file, the branch as main, and the delay time as 5s:
+```
+./auto_update.sh
+python3 auto_update.py
 ```
   - Stop run as a background process:
 ```
-pgrep -f "python3 auto_update.py"
-pgrep -f "auto_update.sh"
-kill <PID>
+kill $(pgrep -f "auto_update.sh")
+kill $(pgrep -f "python3 auto_update.py")
 ```
+- Logs are saved at file `/tmp/auto_git_<timestamp>.log`
 - Copy `.gitignore` file to your folder and chose which types of file you dont want to push to github repo.
 
 ---
