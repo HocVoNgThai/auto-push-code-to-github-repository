@@ -101,5 +101,5 @@ kill $(pgrep -f "python3 auto_update.py")
 
 ---
 ## Updating 🔁
-Updating script and tutorial for Windows.
+Will be update script and tutorial for Windows as soon as I can.
 
