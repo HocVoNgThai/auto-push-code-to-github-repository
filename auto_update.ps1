@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 param (
     [string]$Path = (Split-Path -Parent $MyInvocation.MyCommand.Path),
     [string]$Branch = "main",
-    [int]$Delay = 10
+    [int]$Delay = 5
 )
 
 $MonitorPath = (Resolve-Path $Path -ErrorAction Stop).Path
