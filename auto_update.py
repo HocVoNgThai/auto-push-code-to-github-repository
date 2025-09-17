@@ -10,7 +10,7 @@ from watchdog.events import FileSystemEventHandler
 class GitHandler(FileSystemEventHandler):
     def __init__(self):
         self.last_event = 0
-        self.debounce = 5 
+        self.debounce = 10 
         self.pending_creates_file = set()
         self.pending_creates_folder = set()
         self.pending_changes_file = set()
