@@ -5,7 +5,7 @@
 </div>
 
 ## Introduction 📃
-This repository provides scripts to automatically update your source code to GitHub. It includes three scripts in Python, Bash, and PowerShell for Linux, macOS, and Windows, along with a .gitignore file that lists file types to be excluded when pushing code, helping to minimize unnecessary commits.
+This repository provides scripts to automatically update your source code to GitHub. It includes three scripts in Python, Bash, and PowerShell for Linux, macOS, and Windows, along with a .gitignore file that lists file types to be excluded when pushing code, helping to minimize unnecessary commits. Feel free to use the code in this repo, and dont forget to star my repo. Thank everyone :)))
 
 ---
 ## Credential 🔑
@@ -101,5 +101,5 @@ kill $(pgrep -f "python3 auto_update.py")
 
 ---
 ## Updating 🔁
-Will be update script and tutorial for Windows as soon as I can.
+Update soon...
 
