@@ -78,7 +78,7 @@ class GitHandler(FileSystemEventHandler):
         self.last_event = time.time()
 
         result = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True)
-        if not result.stdout:
+        if not result.stdout or all('auto_git' in line for line in result.stdout.splitlines()):
             return
 
         creates_file = []
@@ -89,9 +89,9 @@ class GitHandler(FileSystemEventHandler):
         for line in result.stdout.splitlines():
             status, path = line.split(maxsplit=1)
             path = path.strip()
-            name = os.path.basename(path)
             if 'auto_git' in path:
                 continue
+            name = os.path.basename(path)
             if os.path.isdir(path):
                 if status == 'A':
                     creates_folder.append(name)
@@ -139,7 +139,7 @@ class GitHandler(FileSystemEventHandler):
 
             if self.check_up_to_date():
                 try:
-                    subprocess.check_call(['git', 'push', '-u', 'origin', self.branch])
+                    subprocess.check_call(['git', 'push', 'origin', self.branch])
                     logging.info("Pushed successfully")
                 except subprocess.CalledProcessError as e:
                     logging.error(f"Error in git push: {e}")
@@ -150,19 +150,25 @@ class GitHandler(FileSystemEventHandler):
             try:
                 pull_result = subprocess.run(['git', 'pull', '--ff-only', 'origin', self.branch], capture_output=True, text=True)
                 if pull_result.returncode != 0:
-                    logging.error(f"Pull failed: {pull_result.stderr}")
-                    return  # Skip push
+                    logging.info("Fast-forward pull failed, trying rebase...")
+                    pull_result = subprocess.run(['git', 'pull', '--rebase', 'origin', self.branch], capture_output=True, text=True)
+                    if pull_result.returncode != 0:
+                        logging.error(f"Pull failed (rebase): {pull_result.stderr}")
+                        logging.info(f"Resolve conflict manually with 'git rebase origin/{self.branch}' or 'git merge origin/{self.branch}'")
+                        subprocess.run(['git', 'rebase', '--abort'], capture_output=True)
+                        return  
             except subprocess.CalledProcessError as e:
                 logging.error(f"Pull failed: {e}")
+                logging.info(f"Resolve conflict manually with 'git rebase origin/{self.branch}' or 'git merge origin/{self.branch}'")
+                subprocess.run(['git', 'rebase', '--abort'], capture_output=True)
                 return
 
             try:
-                subprocess.check_call(['git', 'push', '-u', 'origin', self.branch])
+                subprocess.check_call(['git', 'push', 'origin', self.branch])
                 logging.info("Pushed successfully")
             except subprocess.CalledProcessError as e:
                 logging.error(f"Error in git push: {e}")
 
-        # Reset pending lists
         self.pending_creates_file.clear()
         self.pending_creates_folder.clear()
         self.pending_changes_file.clear()
