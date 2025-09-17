@@ -34,7 +34,7 @@ $watcher.Filter = "*.*"
 $watcher.NotifyFilter = [System.IO.NotifyFilters]::FileName -bor [System.IO.NotifyFilters]::DirectoryName -bor [System.IO.NotifyFilters]::LastWrite
 
 $lastEventTime = Get-Date
-$debounceSeconds = 10
+$debounceSeconds = 5
 $pendingCreatesFile = @{}
 $pendingCreatesFolder = @{}
 $pendingChangesFile = @{}
