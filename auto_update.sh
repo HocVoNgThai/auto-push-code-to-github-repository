@@ -1,6 +1,6 @@
 #!/bin/bash
 BRANCH="main"
-DELAY=10
+DELAY=5
 MONITOR_PATH=""
 LOG_FILE="/tmp/auto_git_$(date +%s).log"
 
