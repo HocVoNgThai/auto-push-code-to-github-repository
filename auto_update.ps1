@@ -94,7 +94,6 @@ function Generate-CommitMessage {
     $changesFile = @()
     $deletesFile = @()
     $deletesFolder = @()
-
     $gitStatus = git status --porcelain
     if ($gitStatus) {
         foreach ($line in $gitStatus) {
@@ -133,7 +132,6 @@ function Generate-CommitMessage {
             }
         }
     }
-
     $message = ""
     if ($createsFile) {
         $message += "Create file $($createsFile -join ', ');"
