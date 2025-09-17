@@ -85,7 +85,7 @@ if [ "$WATCH_TOOL" = "inotifywait" ]; then
     done
 elif [ "$WATCH_TOOL" = "fswatch" ]; then
     fswatch -0 -r --exclude '\.git/|\.DS_Store|node_modules/' . | while read -d "" event; do
-        sleep 10 
+        sleep 5 
         commit_and_push
     done
 fi
