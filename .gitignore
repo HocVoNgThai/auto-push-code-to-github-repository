@@ -61,6 +61,3 @@ dist/ build/ out/ public/build/ public/dist/
 #Miscellaneous
 
 *.bak *.gho *.ori *.orig *.rej *.suo *.nupkg *.snk *.coverage *.pytest_cache/ *.ruff_cache/ *.mypy_cache/
-
-#Linux
-*.swp
