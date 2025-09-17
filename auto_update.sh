@@ -25,7 +25,6 @@ if [ -z "$MONITOR_PATH" ]; then
     MONITOR_PATH=$(dirname "$(realpath "$0")")
 fi
 
-
 if [ ! -d "$MONITOR_PATH" ]; then
     echo "Error: $MONITOR_PATH is not a valid directory" | tee -a "$LOG_FILE"
     exit 1
@@ -81,14 +80,12 @@ generate_commit_message() {
                 deletes_file="$deletes_file$name, "
             fi
         fi
-    done < <(git status --porcelain)
-
+    done < <(git status --porcelain | grep -v 'auto_git.*\.log')
     creates_file=${creates_file%, }
     creates_folder=${creates_folder%, }
     changes_file=${changes_file%, }
     deletes_file=${deletes_file%, }
     deletes_folder=${deletes_folder%, }
-
     local message=""
     [ -n "$creates_file" ] && message="$message Create file $creates_file;"
     [ -n "$creates_folder" ] && message="$message Create folder $creates_folder;"
@@ -101,7 +98,7 @@ generate_commit_message() {
 }
 
 handle_unstaged_changes() {
-    if [ -n "$(git status --porcelain | grep -v '^??' | grep -v 'auto_git\.log')" ]; then
+    if [ -n "$(git status --porcelain | grep -v '^??' | grep -v 'auto_git.*\.log')" ]; then
         echo "$(date): Unstaged changes detected. Committing them..." | tee -a "$LOG_FILE"
         git add .
         if [ $? -ne 0 ]; then
@@ -133,7 +130,7 @@ check_up_to_date() {
 }
 
 commit_and_push() {
-    if [ -n "$(git status --porcelain)" ]; then
+    if [ -n "$(git status --porcelain | grep -v 'auto_git.*\.log')" ]; then
         git add .
         if [ $? -ne 0 ]; then
             echo "$(date): Error in git add" | tee -a "$LOG_FILE"
@@ -166,8 +163,14 @@ commit_and_push() {
     fi
     pull_output=$(git pull --ff-only origin $BRANCH 2>&1)
     if [ $? -ne 0 ]; then
-        echo "$(date): Pull failed: $pull_output" | tee -a "$LOG_FILE"
-        return
+        echo "$(date): Pull failed (fast-forward): $pull_output" | tee -a "$LOG_FILE"
+        pull_output=$(git pull --rebase origin $BRANCH 2>&1)
+        if [ $? -ne 0 ]; then
+            echo "$(date): Pull failed (rebase): $pull_output" | tee -a "$LOG_FILE"
+            echo "$(date): Resolve conflict manually with 'git rebase origin/$BRANCH' or 'git merge origin/$BRANCH'" | tee -a "$LOG_FILE"
+            git rebase --abort 2>/dev/null || true
+            return 
+        fi
     fi
 
     git push origin $BRANCH
@@ -181,7 +184,7 @@ commit_and_push() {
 if [ "$WATCH_TOOL" = "inotifywait" ]; then
     while true; do
         inotifywait -r -e modify,create,delete,move --exclude '(\.git/|\.DS_Store|node_modules/|auto_git.*\.log)' .
-        sleep $DELAY  
+        sleep $DELAY
         commit_and_push
     done
 elif [ "$WATCH_TOOL" = "fswatch" ]; then
