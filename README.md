@@ -1,3 +1,13 @@
+<p align="center">
+  <img src="https://visitor-badge.laobi.icu/badge?page_id=HocVoNgThai.auto-push-code-to-github-repository" alt="visitor badge"/>
+  <img src="https://img.shields.io/github/license/HocVoNgThai/auto-push-code-to-github-repository" alt="license"/>
+  <img src="https://img.shields.io/github/forks/HocVoNgThai/auto-push-code-to-github-repository?style=social" alt="forks"/>
+  <img src="https://img.shields.io/github/last-commit/HocVoNgThai/auto-push-code-to-github-repository?style=social" alt="last commit"/>
+  <img src="https://img.shields.io/github/stars/HocVoNgThai/auto-push-code-to-github-repository.svg?style=social&label=Star" alt="stars"/>
+  <img src="https://img.shields.io/github/languages/top/HocVoNgThai/auto-push-code-to-github-repository"/>
+  <img src="https://img.shields.io/github/languages/count/HocVoNgThai/auto-push-code-to-github-repository"/>
+</p>
+
 <div align = "center">
   
   # auto-push-code-to-github-repository ⚙️
